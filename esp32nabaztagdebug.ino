@@ -20,7 +20,7 @@ Scheduler ts;
 #define MOTOR_B 0
 #define MOTOR_A 1
 int choreography_1[][2] = { 
-  { MOTOR_FORWARD, 3000},
+  { MOTOR_FORWARD, 12000},
   { MOTOR_STOP, 1000},
   { MOTOR_BACK, 6000},
   { MOTOR_FORWARD, 3000},
@@ -43,11 +43,12 @@ void debounce() {
 }
 
 void check_button(){
-  Serial.print(".");
+  //Serial.print(".");
   buttonState = digitalRead(button);
   if(buttonState){
     Serial.println("button pressed");
-    mov_schdule();
+    //mov_schdule();
+    advance();
     t_sample.setCallback(&debounce);
     t_sample.delay(1000);
     Serial.println("continue");
@@ -55,6 +56,59 @@ void check_button(){
 }
 
 /////////////////////////
+
+///ear reader
+int earA = 34;
+#define LOWVAL 1
+#define HIGHVAL 2
+int lastRead = 0;
+int state = HIGHVAL;
+int resample = true;
+
+void ear_sense(){
+  int time_since_last_read = millis() - lastRead;
+  lastRead = millis();
+  Serial.print("Duration: ");
+  Serial.println(time_since_last_read);
+  if(time_since_last_read > 1000 && !resample){
+    Serial.print("Stopping");
+    motor_move(MOTOR_A,MOTOR_STOP);
+    resample = true;
+  }else{
+    if(resample){
+      Serial.println("Ignoring\n");
+      resample = false;
+    }
+  }
+}
+
+void ear_read() {
+  int readMe = analogRead (earA);
+
+  //Serial.println (readMe);
+
+
+  if ((HIGHVAL == state) && (readMe < 500)) {
+    ear_sense();
+    //Serial.print (" (HIGH): ");
+    //Serial.println (readMe);
+    //
+    state = LOWVAL;
+  }
+  if ((LOWVAL == state) && (readMe > 500)) {
+    ear_sense();
+    //Serial.print (" (LOW): ");
+    //Serial.println (readMe);
+    state = HIGHVAL;
+  }
+}
+
+Task t_ear_a(10, TASK_FOREVER, &ear_read, &ts, true);
+
+void setupEars(){
+  pinMode (earA, INPUT);
+}
+////
 
 
 
@@ -74,6 +128,7 @@ void setupMotors() {
 
 void setup() {
   setupMotors();
+  setupEars();
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println("\nstarting\n");
@@ -95,7 +150,9 @@ void motor_move(int motor, int dir){
       break;
   }
 }
-
+void advance(){
+  motor_move(MOTOR_A,MOTOR_BACK);
+}
 ////// choreography
 
 int i_mov[] ={0,0};
@@ -110,7 +167,7 @@ bool mov_end(){
 }
 
 void mov_callbackack(){
-  Serial.println("mov_callbackack running"); 
+  //Serial.println("mov_callbackack running"); 
   Task &t = ts.currentTask();
   int motor = t.getId();
   //set direction
