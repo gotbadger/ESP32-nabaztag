@@ -98,29 +98,34 @@ void motor_move(int motor, int dir){
 
 ////// choreography
 
-int i_mov = 0;
+int i_mov[] ={0,0};
 bool mov_end(){
+  Task &t = ts.currentTask();
+  int motor = t.getId();
   //finish choreography and stop movement
-  motor_move(MOTOR_B, MOTOR_STOP);
-  i_mov = 0;
+  Serial.println("mov_callbackack running"); 
+  motor_move(motor, MOTOR_STOP);
+  i_mov[motor] = 0;
   return true;
 }
 
 void mov_callbackack(){
+  Serial.println("mov_callbackack running"); 
   Task &t = ts.currentTask();
   int motor = t.getId();
   //set direction
-  motor_move(motor, choreography_1[i_mov][0]);
+  motor_move(motor, choreography_1[i_mov[motor]][0]);
   //set time till next choreography movement
-  t.delay(choreography_1[i_mov][1]);
-  i_mov++;
+  t.delay(choreography_1[i_mov[motor]][1]);
+  i_mov[motor]++;
 }
 bool noop() {
   return true;
 }
 
 void mov_schdule(){
- if(i_mov != 0){
+ int motor_state = i_mov[MOTOR_A] + i_mov[MOTOR_B];
+ if(motor_state != 0){
   Serial.println("already running"); 
   return;
  }
