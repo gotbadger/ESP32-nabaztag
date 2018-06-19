@@ -27,9 +27,19 @@ int choreography_1[][2] = {
 };
 
 
+/* PINOUT
+ *  [32, 15 34] 
+ *              
+ *              14
+ *              27
+ *              3v
+ *              GND
+ *              13
+ *              12
+ */
 
 //////////////////////////////////// button
-int button = 25;
+int button = 15;
 bool buttonState = false;
 void check_button();
 void debounce();
@@ -48,7 +58,7 @@ void check_button(){
   if(buttonState){
     Serial.println("button pressed");
     //mov_schdule();
-    advance();
+    ear_calibrate();
     t_sample.setCallback(&debounce);
     t_sample.delay(1000);
     Serial.println("continue");
@@ -58,55 +68,78 @@ void check_button(){
 /////////////////////////
 
 ///ear reader
-int earA = 34;
+/*
+ * here we look at the interval between high and low changes
+ * when we check a large gap we stop on the next change
+ * this results in the ears calibarating to the same location
+ * each time it is run
+ */
+
 #define LOWVAL 1
 #define HIGHVAL 2
-int lastRead = 0;
-int state = HIGHVAL;
-int resample = true;
+#define EAR_TIME 1000
 
-void ear_sense(){
-  int time_since_last_read = millis() - lastRead;
-  lastRead = millis();
-  Serial.print("Duration: ");
-  Serial.println(time_since_last_read);
-  if(time_since_last_read > 1000 && !resample){
-    Serial.print("Stopping");
-    motor_move(MOTOR_A,MOTOR_STOP);
-    resample = true;
+int ear_pins[] = {34, 32};
+int ear_last_read[] = {0,0};
+boolean ear_resample[] = {true, true};
+int ear_state[] = {HIGHVAL, HIGHVAL};
+
+void ear_sense(int ear){
+  int current_time = millis();
+  int time_since_last_read = current_time - ear_last_read[ear];
+  ear_last_read[ear] = current_time;
+
+  if(time_since_last_read > EAR_TIME && !ear_resample[ear]){
+    //Serial.print("Stop Ear: ");
+    //Serial.println(ear);
+    Task &t = ts.currentTask();
+    motor_move(ear, MOTOR_STOP);
+    ear_resample[ear] = true;
+    delete &t;
   }else{
-    if(resample){
-      Serial.println("Ignoring\n");
-      resample = false;
+    if(ear_resample[ear]){
+      //Serial.print("Resample Ear: ");
+      //Serial.println(ear);
+      ear_resample[ear] = false;
     }
   }
 }
 
 void ear_read() {
-  int readMe = analogRead (earA);
-
-  //Serial.println (readMe);
-
-
-  if ((HIGHVAL == state) && (readMe < 500)) {
-    ear_sense();
-    //Serial.print (" (HIGH): ");
-    //Serial.println (readMe);
-    //
-    state = LOWVAL;
+  Task &t = ts.currentTask();
+  int ear = t.getId();
+  int readMe = analogRead (ear_pins[ear]);
+  
+  if ((HIGHVAL == ear_state[ear]) && (readMe < 500)) {
+    ear_sense(ear);
+    ear_state[ear] = HIGHVAL; 
   }
-  if ((LOWVAL == state) && (readMe > 500)) {
-    ear_sense();
-    //Serial.print (" (LOW): ");
-    //Serial.println (readMe);
-    state = HIGHVAL;
+  if ((LOWVAL == ear_state[ear]) && (readMe > 500)) {
+    ear_sense(ear);
+    ear_state[ear] = LOWVAL; 
   }
 }
 
-Task t_ear_a(10, TASK_FOREVER, &ear_read, &ts, true);
+void ear_calibrate(){
+  Serial.println("calibrating ears");
+  Task *t1 = new Task(10, TASK_FOREVER, &ear_read, &ts, true);
+  Task *t2 = new Task(10, TASK_FOREVER, &ear_read, &ts, true);
+  t1->setId(MOTOR_A);
+  t2->setId(MOTOR_B);
+  motor_move(MOTOR_A, MOTOR_FORWARD);
+  motor_move(MOTOR_B, MOTOR_FORWARD);
+  t1->restartDelayed();
+  t2->restartDelayed();
+}
+
+
 
 void setupEars(){
-  pinMode (earA, INPUT);
+  for (int ear =0; ear < ARRAY_SIZE(ear_pins); ear++) {
+    Serial.print("Set ear: ");
+    Serial.println(ear);
+    pinMode (ear_pins[ear], INPUT);
+  }
 }
 ////
 
@@ -127,10 +160,10 @@ void setupMotors() {
 }
 
 void setup() {
+  Serial.begin(115200);
   setupMotors();
   setupEars();
-  // put your setup code here, to run once:
-  Serial.begin(115200);
+  ear_calibrate();
   Serial.println("\nstarting\n");
 }
 
@@ -143,15 +176,11 @@ void motor_move(int motor, int dir){
       digitalWrite(motor_pins[motor][1], LOW);
       break;
     case MOTOR_FORWARD:
-      digitalWrite(motor_pins[motor][0], LOW);
-      digitalWrite(motor_pins[motor][1], HIGH);
+      digitalWrite(motor_pins[motor][0], LOW);      digitalWrite(motor_pins[motor][1], HIGH);
       break;
     default:
       break;
   }
-}
-void advance(){
-  motor_move(MOTOR_A,MOTOR_BACK);
 }
 ////// choreography
 
